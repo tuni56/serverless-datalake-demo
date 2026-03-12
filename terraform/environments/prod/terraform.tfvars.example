@@ -1,0 +1,10 @@
+project_name = "ecommerce-datalake"
+environment  = "prod"
+aws_region   = "us-east-2"
+
+tags = {
+  Owner       = "DataEngineering"
+  CostCenter  = "Analytics"
+  Compliance  = "SOC2"
+  Backup      = "Daily"
+}
