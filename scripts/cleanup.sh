@@ -76,9 +76,9 @@ if [ -d "data-generator/output" ]; then
     rm -rf data-generator/output
 fi
 
-if [ -d "data-generator/venv" ]; then
+if [ -d "data-generator/.venv" ]; then
     echo "Eliminando entorno virtual..."
-    rm -rf data-generator/venv
+    rm -rf data-generator/.venv
 fi
 
 echo ""

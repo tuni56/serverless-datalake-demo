@@ -53,13 +53,13 @@ echo "================================================"
 
 cd data-generator
 
-if [ ! -d "venv" ]; then
-    echo "Creando entorno virtual..."
-    python3 -m venv venv
+if [ ! -d ".venv" ]; then
+    echo "Creando entorno virtual con uv..."
+    uv venv
 fi
 
-source venv/bin/activate
-pip install -q -r requirements.txt
+source .venv/bin/activate
+uv pip install -q -r requirements.txt
 
 echo "Generando datos..."
 python generate_ecommerce_data.py
