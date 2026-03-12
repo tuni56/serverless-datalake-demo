@@ -5,7 +5,18 @@
 1. **AWS CLI** configurado con credenciales
 2. **Terraform** >= 1.5
 3. **Python** 3.9+
-4. **Git** para control de versiones
+4. **uv** (Python package manager)
+5. **Git** para control de versiones
+
+### Instalar uv
+
+```bash
+# Linux/macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# O con pip
+pip install uv
+```
 
 ## Paso a Paso
 
@@ -35,9 +46,9 @@ aws sts get-caller-identity
 
 ```bash
 cd data-generator
-python3 -m venv venv
-source venv/bin/activate  # En Windows: venv\Scripts\activate
-pip install -r requirements.txt
+uv venv
+source .venv/bin/activate  # En Windows: .venv\Scripts\activate
+uv pip install -r requirements.txt
 python generate_ecommerce_data.py
 ```
 
