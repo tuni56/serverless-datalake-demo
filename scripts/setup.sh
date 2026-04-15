@@ -53,16 +53,11 @@ echo "================================================"
 
 cd data-generator
 
-if [ ! -d ".venv" ]; then
-    echo "Creando entorno virtual con uv..."
-    uv venv
-fi
-
-source .venv/bin/activate
-uv pip install -q -r requirements.txt
+echo "Instalando dependencias con uv..."
+uv sync -q
 
 echo "Generando datos..."
-python generate_ecommerce_data.py
+uv run python generate_ecommerce_data.py
 
 cd ..
 

@@ -118,7 +118,7 @@ cd serverless-datalake-demo
 
 # 2. Generar datos de prueba
 cd data-generator
-python generate_ecommerce_data.py
+uv run python generate_ecommerce_data.py
 
 # 3. Desplegar infraestructura
 cd ../terraform/environments/dev

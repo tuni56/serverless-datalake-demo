@@ -1,0 +1,18 @@
+[project]
+name = "ecommerce-data-generator"
+version = "1.0.0"
+description = "Synthetic e-commerce data generator for the serverless data lake demo"
+requires-python = ">=3.9"
+dependencies = [
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "pyarrow>=12.0.0",
+    "boto3>=1.26.0",
+    "awswrangler>=3.0.0",
+]
+
+[project.scripts]
+generate = "generate_ecommerce_data:main"
+
+[tool.uv]
+dev-dependencies = []
