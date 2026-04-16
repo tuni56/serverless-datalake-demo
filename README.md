@@ -158,7 +158,7 @@ Ver [docs/cost-analysis.md](docs/cost-analysis.md) para detalles completos.
 
 ## 👥 Autor
 
-Demo preparada para el AWS User Group La Paz - Marzo 2026
+Rocío Baigorria - Demo preparada para el AWS User Group La Paz - Marzo 2026
 
 ## 📄 Licencia
 
