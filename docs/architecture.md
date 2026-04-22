@@ -169,16 +169,38 @@ Este proyecto implementa un Data Lake serverless en AWS siguiendo una arquitectu
 
 ### 3. Amazon Athena (Query Engine)
 
-- Motor: Presto/Trino
+- Motor: Trino (Athena engine v3)
 - Serverless: sin infraestructura que administrar
 - Pricing: pay-per-query ($5/TB escaneado)
+- Partition Projection: descubrimiento automático de particiones sin MSCK REPAIR
 - Optimizaciones:
   - Formato columnar (Parquet)
   - Compresión
-  - Particionamiento
+  - Particionamiento con projection (year/month)
   - Selección de columnas específicas
 
-### 4. IAM (Security)
+### 4. VPC & Networking (Security Layer)
+
+**VPC** (`10.0.0.0/16`):
+- 2 subnets privadas (us-east-2a, us-east-2b) para alta disponibilidad
+- Sin NAT Gateway ni Internet Gateway — tráfico aislado
+- Route table privada asociada a ambas subnets
+
+**VPC Endpoints**:
+- **S3 Gateway Endpoint**: Tráfico a S3 sin salir a internet, asociado a la route table privada
+- **Glue Interface Endpoint**: Tráfico al API de Glue vía PrivateLink, desplegado en ambas subnets
+
+**Security Group** (`vpc-endpoints-sg`):
+- Ingress: HTTPS (443) desde el CIDR de la VPC
+- Ingress: All TCP (0-65535) self-referencing — requerido por Glue para comunicación inter-nodo
+- Egress: All outbound
+
+**Glue Connection** (tipo `NETWORK`):
+- Asociada a subnet privada + security group
+- Permite que el Glue Job ejecute dentro de la VPC
+- Accede a S3 vía Gateway Endpoint y al Glue Catalog vía Interface Endpoint
+
+### 5. IAM (Security)
 
 **Roles creados**:
 
@@ -187,8 +209,13 @@ Este proyecto implementa un Data Lake serverless en AWS siguiendo una arquitectu
    - Principio de least privilege
 
 2. **Glue Job Role**:
-   - Permisos: S3 read/write, Glue Data Catalog read
+   - Permisos: S3 read/write, Glue Data Catalog read, `glue:GetConnection`
+   - EC2 networking: `CreateNetworkInterface`, `DeleteNetworkInterface`, `Describe*` (subnets, SGs, VPC, route tables, endpoints)
+   - EC2 tagging: `CreateTags`/`DeleteTags` en ENIs (condicionado a tag `aws-glue-service-resource`)
    - Acceso a CloudWatch Logs
+
+3. **Lambda SQS Trigger Role**:
+   - Permisos: SQS read/delete, Glue StartJobRun, CloudWatch Logs
 
 **Políticas de seguridad**:
 - Deny HTTP (solo HTTPS)
@@ -198,11 +225,15 @@ Este proyecto implementa un Data Lake serverless en AWS siguiendo una arquitectu
 ## Flujo de Datos
 
 1. **Ingesta**: Datos CSV subidos a S3 raw bucket
-2. **Discovery**: Glue Crawler escanea y crea tablas en Data Catalog
-3. **Transform**: Glue Job lee CSV, transforma a Parquet, escribe a curated bucket
-4. **Catalog**: Glue Crawler actualiza metadatos de datos curados
-5. **Query**: Athena consulta Parquet files usando metadatos del Catalog
-6. **Consume**: Usuarios/aplicaciones consumen resultados
+2. **Evento**: S3 envía notificación a cola SQS (`s3:ObjectCreated:*` en `orders/`)
+3. **Trigger**: Lambda consume el mensaje SQS y ejecuta `glue:StartJobRun`
+4. **Transform**: Glue Job (dentro de la VPC) lee CSV, transforma a Parquet, escribe a curated bucket
+   - Accede a S3 vía VPC Gateway Endpoint
+   - Accede al Glue Catalog vía VPC Interface Endpoint
+5. **Catalog**: Glue Crawler actualiza metadatos de datos curados; tablas con Partition Projection no requieren crawler
+6. **Query**: Athena consulta Parquet files usando metadatos del Catalog
+7. **Consume**: Usuarios/aplicaciones consumen resultados
+8. **Observabilidad**: CloudWatch Alarms monitorean DLQ y Glue Job failures → SNS → Email
 
 ## Decisiones de Arquitectura
 
@@ -241,14 +272,21 @@ Este proyecto implementa un Data Lake serverless en AWS siguiendo una arquitectu
 ### Excelencia Operacional
 - ✅ IaC con Terraform (reproducible, versionado)
 - ✅ CloudWatch Logs para monitoreo
+- ✅ CloudWatch Alarms + SNS para alertas proactivas
+- ✅ CloudWatch Dashboard para visibilidad del pipeline
 - ✅ Glue Job Bookmarks para idempotencia
+- ✅ DLQ para mensajes fallidos (retención 14 días)
 
 ### Seguridad
 - ✅ Encryption at rest (SSE-S3)
 - ✅ Encryption in transit (TLS)
 - ✅ IAM roles con least privilege
+- ✅ VPC con subnets privadas (2 AZs)
+- ✅ VPC Endpoints: S3 (Gateway) + Glue (Interface) — sin tráfico a internet
+- ✅ Glue Connection tipo NETWORK con SG self-referencing
 - ✅ Bucket policies restrictivas
 - ✅ Versionamiento habilitado
+- ✅ Public Access Block en todos los buckets
 
 ### Confiabilidad
 - ✅ Servicios serverless administrados por AWS

@@ -70,10 +70,25 @@ resource "aws_glue_crawler" "curated" {
   tags = var.tags
 }
 
+# Glue Connection para VPC
+resource "aws_glue_connection" "vpc" {
+  name            = "${var.project_name}-vpc-connection-${var.environment}"
+  connection_type = "NETWORK"
+
+  physical_connection_requirements {
+    subnet_id              = var.subnet_id
+    availability_zone      = var.subnet_az
+    security_group_id_list = [var.security_group_id]
+  }
+
+  tags = var.tags
+}
+
 # Glue ETL Job
 resource "aws_glue_job" "transform" {
-  name     = "${var.project_name}-transform-${var.environment}"
-  role_arn = var.glue_job_role_arn
+  name        = "${var.project_name}-transform-${var.environment}"
+  role_arn    = var.glue_job_role_arn
+  connections = [aws_glue_connection.vpc.name]
 
   command {
     name            = "pythonshell"

@@ -13,7 +13,7 @@ NC='\033[0m'
 
 REGION=${1:-us-east-2}
 
-echo -e "${YELLOW}⚠ ADVERTENCIA: Esto eliminará todos los recursos de AWS${NC}"
+echo -e "${YELLOW}⚠ ADVERTENCIA: Esto eliminará TODOS los recursos de AWS${NC}"
 echo -e "${YELLOW}⚠ Región: $REGION${NC}"
 echo ""
 echo "¿Estás seguro? (yes/no)"
@@ -26,36 +26,35 @@ fi
 
 cd terraform/environments/dev
 
-# Obtener nombres de buckets antes de destruir
-RAW_BUCKET=$(terraform output -raw raw_bucket_name 2>/dev/null || echo "")
-CURATED_BUCKET=$(terraform output -raw curated_bucket_name 2>/dev/null || echo "")
-SCRIPTS_BUCKET=$(terraform output -raw scripts_bucket_name 2>/dev/null || echo "")
-ATHENA_BUCKET=$(terraform output -raw athena_results_bucket_name 2>/dev/null || echo "")
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+PROJECT="ecommerce-datalake"
 
 echo ""
 echo "================================================"
 echo "  Paso 1: Vaciar buckets S3"
 echo "================================================"
 
-if [ -n "$RAW_BUCKET" ]; then
-    echo "Vaciando $RAW_BUCKET..."
-    aws s3 rm s3://$RAW_BUCKET --recursive --region $REGION 2>/dev/null || true
-fi
+empty_bucket() {
+    local BUCKET="$1"
+    echo "Vaciando s3://$BUCKET ..."
 
-if [ -n "$CURATED_BUCKET" ]; then
-    echo "Vaciando $CURATED_BUCKET..."
-    aws s3 rm s3://$CURATED_BUCKET --recursive --region $REGION 2>/dev/null || true
-fi
+    aws s3 rm s3://$BUCKET --recursive --region $REGION 2>/dev/null || true
 
-if [ -n "$SCRIPTS_BUCKET" ]; then
-    echo "Vaciando $SCRIPTS_BUCKET..."
-    aws s3 rm s3://$SCRIPTS_BUCKET --recursive --region $REGION 2>/dev/null || true
-fi
+    # Eliminar versiones y delete markers (paginado, JSON válido via jq)
+    for TYPE in Versions DeleteMarkers; do
+        while true; do
+            PAYLOAD=$(aws s3api list-object-versions --bucket $BUCKET --region $REGION --output json 2>/dev/null \
+                | jq -c "{Objects: (.${TYPE} // [] | map({Key:.Key, VersionId:.VersionId}))}")
+            COUNT=$(echo $PAYLOAD | jq '.Objects | length')
+            [ "$COUNT" -eq 0 ] && break
+            aws s3api delete-objects --bucket $BUCKET --region $REGION --delete "$PAYLOAD" > /dev/null
+        done
+    done
+}
 
-if [ -n "$ATHENA_BUCKET" ]; then
-    echo "Vaciando $ATHENA_BUCKET..."
-    aws s3 rm s3://$ATHENA_BUCKET --recursive --region $REGION 2>/dev/null || true
-fi
+for SUFFIX in raw curated scripts athena-results; do
+    empty_bucket "${PROJECT}-${SUFFIX}-${ACCOUNT_ID}"
+done
 
 echo ""
 echo "================================================"
@@ -65,28 +64,4 @@ echo "================================================"
 terraform destroy -auto-approve
 
 echo ""
-echo "================================================"
-echo "  Paso 3: Limpiar archivos locales"
-echo "================================================"
-
-cd ../../..
-
-if [ -d "data-generator/output" ]; then
-    echo "Eliminando datos generados..."
-    rm -rf data-generator/output
-fi
-
-if [ -d "data-generator/.venv" ]; then
-    echo "Eliminando entorno virtual..."
-    rm -rf data-generator/.venv
-fi
-
-echo ""
-echo -e "${GREEN}✅ Cleanup completado${NC}"
-echo ""
-echo "Recursos eliminados:"
-echo "  - Buckets S3 y contenido"
-echo "  - Glue Database, Crawlers y Jobs"
-echo "  - Athena Workgroup"
-echo "  - IAM Roles y Policies"
-echo "  - Datos locales generados"
+echo -e "${GREEN}✅ Cleanup completado. Todos los recursos de AWS fueron eliminados.${NC}"

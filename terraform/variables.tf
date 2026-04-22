@@ -20,3 +20,9 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "alert_email" {
+  description = "Email para recibir alertas de CloudWatch (SNS)"
+  type        = string
+  default     = "alerts@example.com"
+}

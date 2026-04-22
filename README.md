@@ -15,36 +15,54 @@ Este proyecto implementa un Data Lake serverless en AWS siguiendo las mejores pr
 ## 🏗️ Arquitectura
 
 ```
-┌─────────────────┐
-│  Raw Data (CSV) │
-│   S3 Bucket     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Glue Crawler   │
-│  (Schema Disc.) │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   Glue ETL Job  │
-│ (Transform to   │
-│    Parquet)     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Curated Data    │
-│  (Parquet)      │
-│   S3 Bucket     │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│ Athena Queries  │
-│  (SQL Analysis) │
-└─────────────────┘
+                                   ┌─────────────────────────────────────────────┐
+                                   │              VPC (10.0.0.0/16)              │
+                                   │  ┌──────────────┐  ┌─────────────────────┐  │
+                                   │  │ Private       │  │ VPC Endpoints       │  │
+                                   │  │ Subnets (x2)  │  │ • S3 (Gateway)      │  │
+                                   │  │ us-east-2a/b  │  │ • Glue (Interface)  │  │
+                                   │  └──────────────┘  └─────────────────────┘  │
+                                   └──────────────────────┬──────────────────────┘
+                                                          │
+┌─────────────────┐   S3 Event     ┌─────────────────┐    │   on failure   ┌─────────────────┐
+│  Raw Data (CSV) │ ─────────────► │   SQS Queue     │    │  ───────────►  │   DLQ (SQS)     │
+│   S3 Bucket     │                │  (glue-trigger) │    │                │  (14d retention)│
+└─────────────────┘                └────────┬────────┘    │                └─────────────────┘
+                                            │ polls       │
+                                            ▼             │
+                                   ┌─────────────────┐    │
+                                   │  Lambda Trigger  │    │
+                                   │ (SQS → Glue)    │    │
+                                   └────────┬────────┘    │
+                                            │ StartJobRun │
+                                            ▼             │
+┌─────────────────┐                ┌─────────────────┐    │
+│  Glue Crawler   │                │   Glue ETL Job  │◄───┘
+│  (Schema Disc.) │                │ (Python Shell)  │ Runs inside VPC
+└────────┬────────┘                │  VPC Connection │ via NETWORK type
+         │                         └────────┬────────┘
+         ▼                                  │
+┌─────────────────┐                         ▼
+│  Glue Catalog   │                ┌─────────────────┐
+│  (Data Catalog) │                │ Curated Data    │
+└─────────────────┘                │  (Parquet)      │
+                                   │   S3 Bucket     │
+                                   └────────┬────────┘
+                                            │
+                                            ▼
+                                   ┌─────────────────┐
+                                   │ Athena Queries  │
+                                   │ (Trino engine)  │
+                                   │ Partition       │
+                                   │ Projection      │
+                                   └─────────────────┘
+
+Observabilidad:
+┌──────────────────────────────────────────────────────┐
+│  CloudWatch Alarms → SNS → Email                     │
+│  • DLQ con mensajes  • Glue Job fallido              │
+│  CloudWatch Dashboard (pipeline health)              │
+└──────────────────────────────────────────────────────┘
 ```
 
 ## 🎯 Caso de Uso: E-commerce Analytics
@@ -73,12 +91,17 @@ Análisis de transacciones de una plataforma de e-commerce con tres datasets pri
 │   │   └── prod/
 │   ├── modules/
 │   │   ├── iam/
+│   │   ├── vpc/            # VPC, subnets, SG, endpoints (S3 Gateway + Glue Interface)
 │   │   ├── s3/
-│   │   ├── glue/
-│   │   └── athena/
+│   │   ├── sqs/            # Cola principal + DLQ
+│   │   ├── lambda/         # Trigger SQS → Glue
+│   │   ├── glue/           # Crawlers, ETL Job, VPC Connection (NETWORK)
+│   │   ├── athena/
+│   │   └── observability/  # CloudWatch Alarms, SNS, Dashboard
 │   └── backend.tf
 ├── glue-jobs/
-│   └── transform_raw_to_curated.py
+│   ├── transform_raw_to_curated.py
+│   └── sqs_glue_trigger.py # Lambda handler
 ├── data-generator/
 │   └── generate_ecommerce_data.py
 ├── queries/
@@ -96,9 +119,12 @@ Análisis de transacciones de una plataforma de e-commerce con tres datasets pri
 
 - **Encryption at Rest**: S3 buckets con SSE-S3
 - **Encryption in Transit**: TLS 1.2+ obligatorio
-- **IAM Roles**: Least privilege para Glue, Athena
-- **VPC Endpoints**: Acceso privado a S3 y Glue (opcional para demo)
+- **IAM Roles**: Least privilege para Glue, Lambda, Athena
+- **VPC**: Subnets privadas (2 AZs) con Security Group restrictivo
+- **VPC Endpoints**: S3 (Gateway) + Glue (Interface) — tráfico no sale a internet
+- **Glue Connection**: Tipo NETWORK con self-referencing SG para comunicación inter-nodo
 - **Bucket Policies**: Deny HTTP, enforce encryption
+- **Public Access Block**: Habilitado en todos los buckets
 
 ## 🚀 Deployment
 
@@ -120,17 +146,17 @@ cd serverless-datalake-demo
 cd data-generator
 uv run python generate_ecommerce_data.py
 
-# 3. Desplegar infraestructura
+# 3. Desplegar infraestructura (configurar alert_email en terraform.tfvars)
 cd ../terraform/environments/dev
 terraform init
 terraform plan
 terraform apply
 
-# 4. Ejecutar Glue Crawler
-aws glue start-crawler --name ecommerce-raw-crawler --region us-east-2
+# 4. Subir datos — el pipeline se dispara automáticamente vía SQS → Lambda → Glue
+aws s3 cp ../../../data-generator/output/orders.csv s3://$(terraform output -raw raw_bucket_name)/orders/ --region us-east-2
 
-# 5. Ejecutar Glue ETL Job
-aws glue start-job-run --job-name transform-raw-to-curated --region us-east-2
+# 5. (Opcional) Ejecutar Glue Crawler manualmente para actualizar el catálogo
+aws glue start-crawler --name ecommerce-datalake-raw-crawler-dev --region us-east-2
 
 # 6. Consultar con Athena
 # Ver queries en queries/sample_queries.sql
@@ -158,8 +184,9 @@ Ver [docs/cost-analysis.md](docs/cost-analysis.md) para detalles completos.
 
 ## 👥 Autor
 
-Rocío Baigorria - Demo preparada para el AWS User Group La Paz - Marzo 2026
+Rocío Baigorria - Demo preparada para el AWS User Group La Paz - Abril 2026
 
 ## 📄 Licencia
 
 MIT
+kiro

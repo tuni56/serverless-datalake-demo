@@ -116,7 +116,8 @@ resource "aws_iam_role_policy" "glue_job" {
         Action = [
           "glue:GetDatabase",
           "glue:GetTable",
-          "glue:GetPartitions"
+          "glue:GetPartitions",
+          "glue:GetConnection"
         ]
         Resource = "*"
       },
@@ -128,6 +129,85 @@ resource "aws_iam_role_policy" "glue_job" {
           "logs:PutLogEvents"
         ]
         Resource = "arn:aws:logs:*:*:/aws-glue/*"
+      },
+      {
+        Sid    = "GlueVPCNetworking"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateNetworkInterface",
+          "ec2:DeleteNetworkInterface",
+          "ec2:DescribeNetworkInterfaces",
+          "ec2:DescribeSecurityGroups",
+          "ec2:DescribeSubnets",
+          "ec2:DescribeVpcAttribute",
+          "ec2:DescribeVpcEndpoints",
+          "ec2:DescribeRouteTables"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid    = "GlueVPCTags"
+        Effect = "Allow"
+        Action = [
+          "ec2:CreateTags",
+          "ec2:DeleteTags"
+        ]
+        Resource = "arn:aws:ec2:*:*:network-interface/*"
+        Condition = {
+          "ForAllValues:StringEquals" = {
+            "aws:TagKeys" = ["aws-glue-service-resource"]
+          }
+        }
+      }
+    ]
+  })
+}
+
+# IAM Role para Lambda (trigger SQS → Glue)
+resource "aws_iam_role" "lambda_sqs_trigger" {
+  name = "${var.project_name}-lambda-sqs-trigger-role-${var.environment}"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+
+  tags = var.tags
+}
+
+resource "aws_iam_role_policy" "lambda_sqs_trigger" {
+  name = "${var.project_name}-lambda-sqs-trigger-policy-${var.environment}"
+  role = aws_iam_role.lambda_sqs_trigger.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["glue:StartJobRun"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ]
+        Resource = "arn:aws:logs:*:*:*"
       }
     ]
   })

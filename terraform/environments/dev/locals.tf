@@ -1,1 +1,1 @@
-../../../locals.tf
+../../locals.tf

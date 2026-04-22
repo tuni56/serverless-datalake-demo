@@ -3,7 +3,10 @@
 *.tfstate
 *.tfstate.*
 *.tfvars
+*.tfplan
+tfplan
 .terraform.lock.hcl
+*.zip
 
 # Python
 __pycache__/

@@ -77,7 +77,9 @@ def generate_orders(customers_df, products_df):
             'order_id': i,
             'customer_id': customer_id,
             'product_id': product_id,
-            'order_date': (datetime.now() - timedelta(days=random.randint(1, 365))).strftime('%Y-%m-%d'),
+            'order_date': (order_dt := datetime.now() - timedelta(days=random.randint(1, 365))).strftime('%Y-%m-%d'),
+            'year': order_dt.year,
+            'month': order_dt.month,
             'quantity': quantity,
             'total_amount': round(product_price * quantity, 2),
             'status': random.choices(statuses, weights=status_weights)[0]

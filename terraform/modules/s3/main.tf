@@ -185,8 +185,32 @@ resource "aws_s3_bucket_lifecycle_configuration" "athena_results" {
     id     = "delete-old-results"
     status = "Enabled"
 
+    filter {}
+
     expiration {
       days = 7
     }
   }
+}
+
+# Notificación S3 → SQS al subir archivos al bucket raw
+variable "glue_trigger_queue_arn" {
+  description = "ARN de la cola SQS que recibe eventos del bucket raw"
+  type        = string
+  default     = ""
+}
+
+resource "aws_s3_bucket_notification" "raw" {
+  bucket = aws_s3_bucket.raw.id
+
+  dynamic "queue" {
+    for_each = var.glue_trigger_queue_arn != "" ? [1] : []
+    content {
+      queue_arn     = var.glue_trigger_queue_arn
+      events        = ["s3:ObjectCreated:*"]
+      filter_prefix = "orders/"
+    }
+  }
+
+  depends_on = [aws_s3_bucket_policy.raw]
 }

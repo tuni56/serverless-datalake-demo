@@ -37,3 +37,22 @@ variable "tags" {
   description = "Tags para los recursos"
   type        = map(string)
 }
+
+variable "subnet_id" {
+  description = "Subnet privada para el Glue Job (VPC)"
+  type        = string
+  default     = ""
+}
+
+variable "subnet_az" {
+  description = "Availability zone de la subnet para Glue Connection"
+  type        = string
+  default     = ""
+}
+
+variable "security_group_id" {
+  description = "Security group ID para la Glue Connection VPC"
+  type        = string
+  default     = ""
+}
+
