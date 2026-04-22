@@ -26,3 +26,9 @@ variable "alert_email" {
   type        = string
   default     = "alerts@example.com"
 }
+
+variable "quicksight_user" {
+  description = "QuickSight username para permisos del data source (e.g. Admin/rocio)"
+  type        = string
+  default     = ""
+}

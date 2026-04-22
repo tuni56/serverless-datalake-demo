@@ -104,3 +104,19 @@ module "observability" {
 
   depends_on = [module.glue, module.sqs]
 }
+
+module "quicksight" {
+  source = "../../modules/quicksight"
+  count  = var.quicksight_user != "" ? 1 : 0
+
+  project_name               = var.project_name
+  environment                = var.environment
+  athena_workgroup_name      = module.athena.workgroup_name
+  curated_bucket_arn         = module.s3.curated_bucket_arn
+  athena_results_bucket_name = module.s3.athena_results_bucket_name
+  glue_database_name         = module.glue.database_name
+  quicksight_user            = var.quicksight_user
+  tags                       = local.common_tags
+
+  depends_on = [module.athena, module.s3, module.glue]
+}

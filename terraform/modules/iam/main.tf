@@ -49,7 +49,10 @@ resource "aws_iam_role_policy" "glue_crawler" {
           "glue:CreateTable",
           "glue:UpdateTable",
           "glue:CreatePartition",
-          "glue:UpdatePartition"
+          "glue:UpdatePartition",
+          "glue:BatchGetPartition",
+          "glue:BatchCreatePartition",
+          "glue:BatchDeletePartition"
         ]
         Resource = "*"
       },

@@ -2,9 +2,9 @@
 
 ## 📊 Resumen Ejecutivo
 
-**Costo estimado para la demo completa**: **$3-5 USD**
+**Costo estimado para la demo completa (2-3 horas)**: **< $5 USD**
 
-Este análisis considera el uso de la capa gratuita de AWS y los costos incrementales para una demo de 2-3 horas con datasets de tamaño moderado.
+Este análisis considera el uso de la capa gratuita de AWS y los costos incrementales para una demo con datasets de tamaño moderado (~3 MB CSV).
 
 ## 🆓 Capa Gratuita AWS (12 meses)
 
@@ -12,148 +12,163 @@ Este análisis considera el uso de la capa gratuita de AWS y los costos incremen
 - **5 GB** de almacenamiento estándar
 - **20,000** solicitudes GET
 - **2,000** solicitudes PUT
-- **100 GB** de transferencia de datos salientes
 
 ### AWS Glue
 - **1 millón** de objetos almacenados en el Data Catalog
 - **10 horas** de tiempo de ejecución de Glue ETL (DPU)
 
+### AWS Lambda
+- **1 millón** de solicitudes/mes
+- **400,000 GB-segundo** de cómputo/mes
+
+### Amazon SQS
+- **1 millón** de solicitudes/mes
+
+### Amazon SNS
+- **1,000** notificaciones email/mes
+
 ### Amazon Athena
-- **No tiene capa gratuita**, pero es pay-per-query
+- **No tiene capa gratuita**, pay-per-query
+
+### Amazon QuickSight
+- **No tiene capa gratuita** (30 días de trial para cuentas nuevas)
 
 ## 💵 Desglose de Costos por Servicio (us-east-2)
 
 ### 1. Amazon S3
 
-#### Almacenamiento
-- **Dataset estimado**: 500 MB raw (CSV) + 200 MB curated (Parquet) = 700 MB
-- **Costo**: $0.023 por GB/mes
-- **Cálculo**: 0.7 GB × $0.023 = **$0.016/mes**
-- **Estado**: ✅ Cubierto por capa gratuita (5 GB)
+| Concepto | Detalle | Costo |
+|---|---|---|
+| Almacenamiento | ~3 MB raw + ~1.5 MB curated = ~5 MB | $0.00 |
+| PUT requests | ~100 (uploads, ETL writes) | $0.00 |
+| GET requests | ~2,000 (Crawlers, ETL, Athena) | $0.00 |
 
-#### Solicitudes API
-- **PUT requests**: ~1,000 (subir archivos, ETL writes)
-- **GET requests**: ~5,000 (Crawler, ETL reads, Athena queries)
-- **Costo PUT**: $0.005 por 1,000 requests = **$0.005**
-- **Costo GET**: $0.0004 por 1,000 requests = **$0.002**
-- **Total requests**: **$0.007**
-- **Estado**: ✅ Cubierto por capa gratuita
-
-#### Transferencia de Datos
-- **Salida**: Mínima (solo consultas Athena a consola)
-- **Costo**: **$0**
-- **Estado**: ✅ Cubierto por capa gratuita (100 GB)
-
-**Total S3**: **$0** (cubierto por free tier)
-
----
+**Total S3**: **$0.00** ✅ Cubierto por free tier
 
 ### 2. AWS Glue
 
-#### Data Catalog
-- **Objetos almacenados**: ~10 tablas/particiones
-- **Costo**: Primeros 1M objetos gratis
-- **Total**: **$0**
-- **Estado**: ✅ Cubierto por capa gratuita
+| Concepto | Detalle | Costo |
+|---|---|---|
+| Data Catalog | ~15 tablas/particiones | $0.00 |
+| Crawler (x2) | ~3 min × 2 DPU × $0.44/hr = $0.09 por crawl | $0.18 |
+| ETL Job (Python Shell) | ~1 min × 1 DPU × $0.44/hr | $0.01 |
 
-#### Glue Crawler
-- **Tiempo de ejecución estimado**: 2-3 minutos por crawl × 3 crawls = 9 minutos
-- **Costo**: $0.44 por hora de DPU (Data Processing Unit)
-- **DPU por defecto**: 2 DPUs
-- **Cálculo**: (9/60) horas × 2 DPUs × $0.44 = **$0.13**
-- **Estado**: ✅ Cubierto por capa gratuita (10 horas)
-
-#### Glue ETL Job
-- **Tiempo de ejecución estimado**: 5-10 minutos
-- **DPU asignados**: 2 DPUs (mínimo para Python Shell) o 10 DPUs (Spark)
-- **Opción 1 - Python Shell**: (10/60) × 1 DPU × $0.44 = **$0.07**
-- **Opción 2 - Spark**: (10/60) × 10 DPUs × $0.44 = **$0.73**
-- **Recomendación**: Usar **Python Shell** para datasets pequeños
-- **Estado**: ✅ Cubierto por capa gratuita (10 horas)
-
-**Total Glue**: **$0** (cubierto por free tier)
-
----
+**Total Glue**: **$0.19** ✅ Cubierto por free tier (10 horas)
 
 ### 3. Amazon Athena
 
-#### Queries SQL
-- **Costo**: $5 por TB de datos escaneados
-- **Dataset curated (Parquet)**: 200 MB
-- **Queries estimadas**: 10-15 queries durante la demo
-- **Datos escaneados por query**: ~50-100 MB (con particionamiento y Parquet)
-- **Total escaneado**: 1 GB (siendo conservadores)
-- **Cálculo**: (1/1000) TB × $5 = **$0.005**
+| Concepto | Detalle | Costo |
+|---|---|---|
+| Queries SQL | ~15 queries × ~50 MB escaneados = ~750 MB | $0.004 |
 
-**Optimizaciones aplicadas**:
-- ✅ Formato Parquet (compresión ~70% vs CSV)
-- ✅ Particionamiento por fecha
-- ✅ Selección de columnas específicas (no SELECT *)
+Optimizaciones aplicadas: Parquet (~75% menos escaneo vs CSV), particionamiento por year/month.
 
-**Total Athena**: **$0.005** ⚠️ **NO cubierto por free tier**
+**Total Athena**: **$0.004** ❌ No tiene free tier (pero es despreciable)
 
----
+### 4. AWS Lambda
 
-### 4. IAM, CloudWatch Logs
+| Concepto | Detalle | Costo |
+|---|---|---|
+| Invocaciones | ~5 invocaciones | $0.00 |
+| Duración | ~5 seg × 128 MB | $0.00 |
 
-#### IAM
-- **Costo**: **$0** (sin cargo)
+**Total Lambda**: **$0.00** ✅ Cubierto por free tier
 
-#### CloudWatch Logs
-- **Logs de Glue Jobs**: ~50 MB
-- **Costo**: Primeros 5 GB gratis
-- **Total**: **$0**
-- **Estado**: ✅ Cubierto por capa gratuita
+### 5. Amazon SQS
 
----
+| Concepto | Detalle | Costo |
+|---|---|---|
+| Cola principal | ~10 mensajes | $0.00 |
+| DLQ | 0 mensajes (idealmente) | $0.00 |
 
-### 5. VPC Endpoints (Opcional)
+**Total SQS**: **$0.00** ✅ Cubierto por free tier
 
-#### Gateway Endpoint (S3)
-- **Costo**: **$0** (sin cargo)
+### 6. VPC Endpoints
 
-#### Interface Endpoint (Glue)
-- **Costo**: $0.01 por hora + $0.01 por GB procesado
-- **Uso demo**: 3 horas × $0.01 = **$0.03**
-- **Datos procesados**: 1 GB × $0.01 = **$0.01**
-- **Total**: **$0.04**
+| Concepto | Detalle | Costo |
+|---|---|---|
+| S3 Gateway Endpoint | Sin cargo | $0.00 |
+| Glue Interface Endpoint | $0.01/hr × 2 AZs × 3 hrs | $0.06 |
+| Datos procesados | ~50 MB × $0.01/GB | $0.001 |
 
-**Recomendación para demo**: ⚠️ **Omitir VPC Endpoints** para reducir costos. Mencionar en la charla como best practice para producción.
+**Total VPC Endpoints**: **$0.06** ❌ No tiene free tier
 
----
+### 7. Amazon SNS + CloudWatch
 
-## 📈 Resumen de Costos
+| Concepto | Detalle | Costo |
+|---|---|---|
+| SNS Topic + suscripción email | ~2 notificaciones | $0.00 |
+| CloudWatch Alarms (2) | $0.10/alarma/mes (prorrateado) | $0.01 |
+| CloudWatch Dashboard | $3.00/mes (prorrateado a 3 hrs) | $0.01 |
 
-| Servicio | Costo Estimado | Cubierto por Free Tier |
-|----------|----------------|------------------------|
-| S3 Storage | $0.016 | ✅ Sí |
-| S3 Requests | $0.007 | ✅ Sí |
-| Glue Crawler | $0.13 | ✅ Sí |
-| Glue ETL Job | $0.07 | ✅ Sí |
-| Athena Queries | $0.005 | ❌ No |
-| CloudWatch | $0 | ✅ Sí |
-| VPC Endpoints | $0.04 | ❌ Opcional |
-| **TOTAL SIN VPC** | **~$0.005** | |
-| **TOTAL CON VPC** | **~$0.045** | |
+**Total Observabilidad**: **$0.02** (parcialmente cubierto por free tier)
+
+### 8. Amazon QuickSight
+
+| Concepto | Detalle | Costo |
+|---|---|---|
+| Enterprise (1 autor) | $24/mes (prorrateado a 3 hrs) | ~$0.10 |
+| Queries DIRECT_QUERY | Sin cargo adicional (usa Athena) | $0.00 |
+
+**Nota**: Si la cuenta es nueva, los primeros 30 días son trial gratuito.
+
+**Total QuickSight**: **$0.00 - $0.10** (depende del trial)
 
 ---
 
-## 🎯 Recomendaciones para la Demo
+## 📈 Resumen de Costos - Demo
 
-### Configuración Recomendada (Costo: ~$0.01)
-1. ✅ **Usar capa gratuita** para S3 y Glue
-2. ✅ **Dataset moderado**: 500 MB raw, 200 MB curated
-3. ✅ **Glue Python Shell** en lugar de Spark
-4. ✅ **Formato Parquet** con compresión Snappy
-5. ✅ **Particionamiento** por año/mes
-6. ❌ **Omitir VPC Endpoints** (mencionar como best practice)
-7. ✅ **Limitar queries Athena** a 10-15 durante la demo
+| Servicio | Costo | Free Tier |
+|---|---|---|
+| S3 (storage + requests) | $0.00 | ✅ |
+| Glue (Crawlers + ETL) | $0.19 | ✅ |
+| Athena (queries) | $0.004 | ❌ |
+| Lambda | $0.00 | ✅ |
+| SQS (cola + DLQ) | $0.00 | ✅ |
+| VPC Endpoint (Glue Interface) | $0.06 | ❌ |
+| Observabilidad (CW + SNS) | $0.02 | Parcial |
+| QuickSight | $0.00 - $0.10 | Trial 30d |
+| **TOTAL** | **~$0.08 - $0.37** | |
 
-### Optimizaciones Adicionales
-- Usar `LIMIT` en queries de prueba
-- Particionar datos por `order_date` (año/mes)
-- Comprimir archivos Parquet con Snappy
-- Eliminar recursos después de la demo con `terraform destroy`
+> **Con free tier activo y trial de QuickSight: ~$0.08**
+> **Sin free tier: ~$0.37**
+> **Costo máximo conservador: < $1 USD**
+
+---
+
+## 💡 ¿Por qué tan barato?
+
+Las decisiones de arquitectura impactan directamente en costos:
+
+| Decisión | Ahorro |
+|---|---|
+| **Python Shell** (1 DPU) vs Spark (10 DPU) | 10x menos en Glue |
+| **Parquet** vs CSV | 70-80% menos escaneo en Athena |
+| **Particionamiento** por year/month | Partition pruning reduce escaneo |
+| **S3 Gateway Endpoint** vs NAT Gateway | $0 vs ~$32/mes |
+| **Serverless** (todo) | $0 cuando no se usa |
+
+---
+
+## 💰 Costos en Producción (Estimación)
+
+Para un caso real con **100 GB de datos nuevos por mes**, queries diarias:
+
+| Servicio | Costo Mensual |
+|---|---|
+| S3 Storage (500 GB acumulado) | $11.50 |
+| Glue Crawlers (diario, 2 DPU) | $13.20 |
+| Glue ETL Jobs (diario, Python Shell) | $6.60 |
+| Glue ETL Jobs (diario, Spark 10 DPU) | $66.00 |
+| Athena (100 GB escaneados/mes) | $0.50 |
+| VPC Endpoint Glue (24/7, 2 AZs) | $14.40 |
+| Lambda + SQS | $0.00 (free tier) |
+| CloudWatch (alarms + dashboard) | $3.20 |
+| QuickSight (1 autor) | $24.00 |
+| **TOTAL (Python Shell)** | **~$73/mes** |
+| **TOTAL (Spark)** | **~$133/mes** |
+
+> **Nota**: El VPC Endpoint de Glue ($14.40/mes) es el costo fijo más significativo en producción. Si el Glue Job corre pocas veces al día, considerar crear/destruir el endpoint con el job (tradeoff: complejidad vs costo).
 
 ---
 
@@ -162,36 +177,24 @@ Este análisis considera el uso de la capa gratuita de AWS y los costos incremen
 Para evitar costos recurrentes:
 
 ```bash
-# 1. Eliminar datos de S3
-aws s3 rm s3://ecommerce-datalake-raw-<account-id> --recursive
-aws s3 rm s3://ecommerce-datalake-curated-<account-id> --recursive
-
-# 2. Destruir infraestructura Terraform
+# 1. Destruir toda la infraestructura
 cd terraform/environments/dev
 terraform destroy --auto-approve
 
-# 3. Verificar Glue Data Catalog
+# 2. Cancelar QuickSight (si no se necesita)
+aws quicksight update-account-settings \
+  --aws-account-id ACCOUNT_ID \
+  --default-namespace default \
+  --no-termination-protection-enabled
+aws quicksight delete-account-subscription \
+  --aws-account-id ACCOUNT_ID
+
+# 3. Verificar que no queden recursos
+aws s3 ls | grep ecommerce-datalake
 aws glue get-databases --region us-east-2
-aws glue delete-database --name ecommerce_db --region us-east-2
 ```
 
-**Costo de retención si olvidas limpiar**: ~$0.50/mes (principalmente S3 storage)
-
----
-
-## 💡 Costos en Producción (Estimación)
-
-Para un caso real con 100 GB de datos nuevos por mes:
-
-| Servicio | Costo Mensual Estimado |
-|----------|------------------------|
-| S3 Storage (500 GB) | $11.50 |
-| Glue Crawlers (diario) | $13.20 |
-| Glue ETL Jobs (diario) | $66.00 |
-| Athena Queries (100 GB escaneados) | $0.50 |
-| **TOTAL** | **~$91.20/mes** |
-
-**Nota**: Estos costos escalan linealmente con el volumen de datos y frecuencia de procesamiento.
+**Costo si olvidás limpiar**: ~$17/mes (principalmente VPC Endpoint + QuickSight + CloudWatch Dashboard)
 
 ---
 
@@ -201,9 +204,10 @@ Para un caso real con 100 GB de datos nuevos por mes:
 - [S3 Pricing](https://aws.amazon.com/s3/pricing/)
 - [Glue Pricing](https://aws.amazon.com/glue/pricing/)
 - [Athena Pricing](https://aws.amazon.com/athena/pricing/)
-- [AWS Free Tier](https://aws.amazon.com/free/)
+- [QuickSight Pricing](https://aws.amazon.com/quicksight/pricing/)
+- [VPC Endpoint Pricing](https://aws.amazon.com/privatelink/pricing/)
 
 ---
 
-**Última actualización**: Marzo 2026  
+**Última actualización**: Abril 2026
 **Región**: us-east-2 (Ohio)
